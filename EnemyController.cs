@@ -22,7 +22,7 @@ public class EnemyController : MonoBehaviour
 
     [Header("Patrol Settings")]
     [SerializeField] private Transform[] waypoints;
-    [SerializeField] private float waypointWaitTime = 2f;
+    [SerializeField] private float waypointWaitTime = 180f;
     [SerializeField] private float patrolSpeed = 2f;
     [SerializeField] private float patrolTurnSpeed = 120f;
     private int currentWaypointIndex = 0;
@@ -45,6 +45,20 @@ public class EnemyController : MonoBehaviour
     private int currentComboCount;
     private float lastAttackTime;
     private bool isAttacking;
+    private int currentComboType; // 0-3 for different combo types
+    
+    [Header("Combo Settings")]
+    [SerializeField] private ComboData[] combos = new ComboData[4];
+    
+    [System.Serializable]
+    public class ComboData
+    {
+        public string comboName;
+        public float[] attackTimings; // Time between each attack in the combo
+        public float[] attackDamages; // Damage for each attack in the combo
+        public string[] animationTriggers; // Animation trigger names for each attack
+        public float comboRange = 1.5f; // Range for this specific combo
+    }
 
     // States
     private enum EnemyState { Idle, Patrol, Chase, Attack, Return }
@@ -75,7 +89,61 @@ public class EnemyController : MonoBehaviour
             Debug.Log("Created default waypoints for patrol");
         }
         
+        InitializeCombos();
         ChangeState(EnemyState.Patrol);
+    }
+    
+    private void InitializeCombos()
+    {
+        // Initialize default combo data if not set in inspector
+        if (combos == null || combos.Length != 4)
+        {
+            combos = new ComboData[4];
+        }
+        
+        // Combo 1: Quick Jabs
+        if (combos[0] == null) combos[0] = new ComboData();
+        if (string.IsNullOrEmpty(combos[0].comboName)) combos[0].comboName = "Quick Jabs";
+        if (combos[0].attackTimings == null || combos[0].attackTimings.Length == 0)
+            combos[0].attackTimings = new float[] { 0.3f, 0.3f, 0.4f };
+        if (combos[0].attackDamages == null || combos[0].attackDamages.Length == 0)
+            combos[0].attackDamages = new float[] { 8f, 8f, 12f };
+        if (combos[0].animationTriggers == null || combos[0].animationTriggers.Length == 0)
+            combos[0].animationTriggers = new string[] { "QuickJab1" };
+        combos[0].comboRange = 1.2f;
+        
+        // Combo 2: Heavy Strikes
+        if (combos[1] == null) combos[1] = new ComboData();
+        if (string.IsNullOrEmpty(combos[1].comboName)) combos[1].comboName = "Heavy Strikes";
+        if (combos[1].attackTimings == null || combos[1].attackTimings.Length == 0)
+            combos[1].attackTimings = new float[] { 0.8f, 0.9f, 1.2f };
+        if (combos[1].attackDamages == null || combos[1].attackDamages.Length == 0)
+            combos[1].attackDamages = new float[] { 15f, 18f, 25f };
+        if (combos[1].animationTriggers == null || combos[1].animationTriggers.Length == 0)
+            combos[1].animationTriggers = new string[] { "HeavyStrike1" };
+        combos[1].comboRange = 1.8f;
+        
+        // Combo 3: Spinning Attacks
+        if (combos[2] == null) combos[2] = new ComboData();
+        if (string.IsNullOrEmpty(combos[2].comboName)) combos[2].comboName = "Spinning Attacks";
+        if (combos[2].attackTimings == null || combos[2].attackTimings.Length == 0)
+            combos[2].attackTimings = new float[] { 0.6f, 0.5f, 0.7f, 0.8f };
+        if (combos[2].attackDamages == null || combos[2].attackDamages.Length == 0)
+            combos[2].attackDamages = new float[] { 10f, 12f, 14f, 20f };
+        if (combos[2].animationTriggers == null || combos[2].animationTriggers.Length == 0)
+            combos[2].animationTriggers = new string[] { "SpinAttack1"};
+        combos[2].comboRange = 2.0f;
+        
+        // Combo 4: Uppercut Combo
+        if (combos[3] == null) combos[3] = new ComboData();
+        if (string.IsNullOrEmpty(combos[3].comboName)) combos[3].comboName = "Uppercut Combo";
+        if (combos[3].attackTimings == null || combos[3].attackTimings.Length == 0)
+            combos[3].attackTimings = new float[] { 0.5f, 0.4f, 1.0f };
+        if (combos[3].attackDamages == null || combos[3].attackDamages.Length == 0)
+            combos[3].attackDamages = new float[] { 12f, 10f, 30f };
+        if (combos[3].animationTriggers == null || combos[3].animationTriggers.Length == 0)
+            combos[3].animationTriggers = new string[] { "UppercutFinish" };
+        combos[3].comboRange = 1.5f;
     }
 
     private void Update()
@@ -269,7 +337,7 @@ public class EnemyController : MonoBehaviour
 
         // Check if player is in attack range
         float distanceToTarget = Vector3.Distance(transform.position, currentTarget.transform.position);
-        if (distanceToTarget <= attackRange)
+        if (distanceToTarget <= GetCurrentComboRange())
         {
             ChangeState(EnemyState.Attack);
             return;
@@ -296,9 +364,29 @@ public class EnemyController : MonoBehaviour
     private void EnterAttackState()
     {
         navMeshAgent.isStopped = true;
-        isAttacking = true;
+        
+        // Reset attack state completely to prevent overlapping combos
+        isAttacking = false;
         currentComboCount = 0;
         lastAttackTime = Time.time;
+        
+        // Clear any existing animation triggers to prevent conflicts
+        animator.ResetTrigger("QuickJab1");
+        animator.ResetTrigger("QuickJab2");
+        animator.ResetTrigger("QuickJab3");
+        animator.ResetTrigger("HeavyStrike1");
+        animator.ResetTrigger("HeavyStrike2");
+        animator.ResetTrigger("HeavyStrike3");
+        animator.ResetTrigger("SpinAttack1");
+        animator.ResetTrigger("SpinAttack2");
+        animator.ResetTrigger("SpinAttack3");
+        animator.ResetTrigger("SpinAttack4");
+        animator.ResetTrigger("UppercutSetup");
+        animator.ResetTrigger("UppercutHit");
+        animator.ResetTrigger("UppercutFinish");
+        
+        // Select a random combo type or cycle through them
+        SelectComboType();
         TriggerAttack();
     }
 
@@ -321,36 +409,99 @@ public class EnemyController : MonoBehaviour
 
         // Check if target moved out of attack range
         float distanceToTarget = Vector3.Distance(transform.position, currentTarget.transform.position);
-        if (distanceToTarget > attackRange * 1.2f)
+        if (distanceToTarget > GetCurrentComboRange() * 1.2f)
         {
             ChangeState(EnemyState.Chase);
             return;
         }
 
         // Check if we can do another attack in the combo
-        if (!isAttacking && Time.time >= lastAttackTime + attackRate && currentComboCount < maxComboHits)
+        ComboData currentCombo = combos[currentComboType];
+        if (!isAttacking && currentComboCount < currentCombo.attackTimings.Length)
         {
-            TriggerAttack();
+            float timeSinceLastAttack = Time.time - lastAttackTime;
+            float requiredDelay = currentCombo.attackTimings[currentComboCount];
+            
+            if (timeSinceLastAttack >= requiredDelay)
+            {
+                TriggerAttack();
+            }
         }
-        // Reset combo if too much time has passed
-        else if (Time.time >= lastAttackTime + comboResetTime)
+        // Reset combo if too much time has passed or combo is complete
+        else if (Time.time >= lastAttackTime + comboResetTime || currentComboCount >= currentCombo.attackTimings.Length)
         {
+            // Ensure we're not stuck in attacking state
+            isAttacking = false;
             currentComboCount = 0;
+            
+            // Clear any lingering animation triggers
+            ClearAllAnimationTriggers();
+            
             ChangeState(EnemyState.Chase);
         }
     }
 
+    private void SelectComboType()
+    {
+        // Always select a different combo type to ensure variety
+        int newComboType;
+        do
+        {
+            newComboType = Random.Range(0, combos.Length);
+        } while (newComboType == currentComboType && combos.Length > 1);
+        
+        currentComboType = newComboType;
+        Debug.Log($"Selected combo: {combos[currentComboType].comboName}");
+    }
+
     private void TriggerAttack()
     {
+        // Prevent triggering attack if already attacking to avoid overlaps
+        if (isAttacking)
+        {
+            Debug.LogWarning("Attempted to trigger attack while already attacking - preventing overlap");
+            return;
+        }
+        
         isAttacking = true;
-        currentComboCount++;
         lastAttackTime = Time.time;
         
-        // Trigger attack animation (make sure you have these triggers in your Animator)
-        animator.SetTrigger("Attack" + Mathf.Clamp(currentComboCount, 1, maxComboHits));
+        ComboData currentCombo = combos[currentComboType];
         
-        // Deal damage (this would be called from an animation event)
-        // You'll need to set up animation events in your attack animations
+        // Trigger the appropriate animation for this attack in the combo
+        if (currentComboCount < currentCombo.animationTriggers.Length)
+        {
+            string triggerName = currentCombo.animationTriggers[currentComboCount];
+            
+            // Clear all other animation triggers before setting the new one
+            ClearAllAnimationTriggers();
+            
+            animator.SetTrigger(triggerName);
+            Debug.Log($"Triggered animation: {triggerName} (Attack {currentComboCount + 1} of {currentCombo.comboName})");
+        }
+        
+        currentComboCount++;
+    }
+
+    private float GetCurrentComboRange()
+    {
+        if (combos != null && currentComboType < combos.Length && combos[currentComboType] != null)
+        {
+            return combos[currentComboType].comboRange;
+        }
+        return attackRange; // Fallback to default attack range
+    }
+
+    private float GetCurrentAttackDamage()
+    {
+        ComboData currentCombo = combos[currentComboType];
+        int attackIndex = currentComboCount - 1; // -1 because we increment before calling this
+        
+        if (attackIndex >= 0 && attackIndex < currentCombo.attackDamages.Length)
+        {
+            return currentCombo.attackDamages[attackIndex];
+        }
+        return attackDamage; // Fallback to default damage
     }
 
     // Call this from animation events
@@ -361,14 +512,15 @@ public class EnemyController : MonoBehaviour
             // Check if target is still in front and in range
             Vector3 directionToTarget = (currentTarget.transform.position - transform.position).normalized;
             if (Vector3.Dot(transform.forward, directionToTarget) > 0.5f && 
-                Vector3.Distance(transform.position, currentTarget.transform.position) <= attackRange * 1.2f)
+                Vector3.Distance(transform.position, currentTarget.transform.position) <= GetCurrentComboRange() * 1.2f)
             {
                 // Apply damage to the target
+                float damage = GetCurrentAttackDamage();
                 var healthComponent = currentTarget.GetComponent<IDamageable>();
                 if (healthComponent != null)
                 {
-                    healthComponent.TakeDamage(attackDamage);
-                    Debug.Log($"Dealt {attackDamage} damage to {currentTarget.name}");
+                    healthComponent.TakeDamage(damage);
+                    Debug.Log($"Dealt {damage} damage to {currentTarget.name} with {combos[currentComboType].comboName}");
                 }
                 else
                 {
@@ -383,18 +535,44 @@ public class EnemyController : MonoBehaviour
     {
         isAttacking = false;
         
-        // If we've reached max combo, reset and chase
-        if (currentComboCount >= maxComboHits)
+        ComboData currentCombo = combos[currentComboType];
+        
+        // Clear animation triggers to prevent lingering states
+        ClearAllAnimationTriggers();
+        
+        // If we've reached the end of this combo, reset and chase
+        if (currentComboCount >= currentCombo.attackTimings.Length)
         {
             currentComboCount = 0;
             ChangeState(EnemyState.Chase);
         }
     }
 
+    private void ClearAllAnimationTriggers()
+    {
+        // Clear all possible animation triggers to prevent conflicts
+        animator.ResetTrigger("QuickJab1");
+        animator.ResetTrigger("QuickJab2");
+        animator.ResetTrigger("QuickJab3");
+        animator.ResetTrigger("HeavyStrike1");
+        animator.ResetTrigger("HeavyStrike2");
+        animator.ResetTrigger("HeavyStrike3");
+        animator.ResetTrigger("SpinAttack1");
+        animator.ResetTrigger("SpinAttack2");
+        animator.ResetTrigger("SpinAttack3");
+        animator.ResetTrigger("SpinAttack4");
+        animator.ResetTrigger("UppercutSetup");
+        animator.ResetTrigger("UppercutHit");
+        animator.ResetTrigger("UppercutFinish");
+    }
+
     private void ExitAttackState()
     {
         isAttacking = false;
         navMeshAgent.isStopped = false;
+        
+        // Clear all animation triggers when exiting attack state
+        ClearAllAnimationTriggers();
     }
     #endregion
 
