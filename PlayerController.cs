@@ -1,5 +1,6 @@
 using UnityEngine;
 
+
 public class PlayerController : MonoBehaviour
 {
     // Movement Parameters
@@ -40,9 +41,9 @@ public class PlayerController : MonoBehaviour
     public Transform raycastPoint;
     private Vector3 wallRunDirection;
 
-    // Lock On Enemy Parameters
-    public EnemyController targetEnemy;
-    public bool combatMode = false;
+    
+    // Final Movement Vector
+    private Vector3 finalMovement;
     
 
 
@@ -61,8 +62,9 @@ public class PlayerController : MonoBehaviour
         PlayerMovement();
         Jump();
         CrouchOrSlide(); 
-
         
+        // Single movement call
+        ApplyMovement();
     }
 
     void PlayerMovement()
@@ -88,13 +90,14 @@ public class PlayerController : MonoBehaviour
         if(move.magnitude >= 0.1f){
             float angleInWorld = Mathf.Atan2(move.x, move.z) * Mathf.Rad2Deg + cameraTrans.eulerAngles.y;
             float targetAngle = Mathf.SmoothDampAngle(transform.eulerAngles.y, angleInWorld, ref smoothTurnVelocity, smoothTurnAngle);
-            transform.rotation = Quaternion.Euler(0, targetAngle, 0);
-            moveDir = Quaternion.Euler(0, angleInWorld, 0) * Vector3.forward;
+            transform.rotation = Quaternion.Euler(0f, targetAngle, 0f);
+            moveDir = Quaternion.Euler(0f, angleInWorld, 0f) * Vector3.forward;
         } else {
             moveDir = Vector3.zero;
         }
 
-        controller.Move(moveDir * moveSpeed * Time.deltaTime);
+        // Store horizontal movement for final movement calculation
+        finalMovement = moveDir * moveSpeed * Time.deltaTime;
         anim.SetFloat("moveSpeed", move.magnitude);
     }
 
@@ -123,9 +126,8 @@ public class PlayerController : MonoBehaviour
                 verticalVelocity += Physics.gravity.y * gravityModifier * Time.deltaTime;
         }
         anim.SetBool("canDoubleJump", canDoubleJump);
-        move.y = verticalVelocity;
-        controller.Move(move * Time.deltaTime);
-        // Vertical movement is now handled in Update
+        // Add vertical movement to final movement
+        finalMovement.y = verticalVelocity * Time.deltaTime;
     }
 
     void CrouchOrSlide()
@@ -161,7 +163,8 @@ public class PlayerController : MonoBehaviour
             verticalVelocity = 0f;
             wallRunDirection += transform.right * 0.5f; // Adjust to stick to the wall
             wallRunDirection.Normalize();
-            controller.Move(wallRunDirection * wallRunForce * Time.deltaTime);
+            // Override final movement with wall run movement
+            finalMovement = wallRunDirection * wallRunForce * Time.deltaTime;
             anim.SetBool("wallRunRight", true);
         }
         else if (isWallLeft && !isGrounded && Input.GetKey(KeyCode.W))
@@ -171,7 +174,8 @@ public class PlayerController : MonoBehaviour
             verticalVelocity = 0f;
             wallRunDirection += -transform.right * 0.5f;
             wallRunDirection.Normalize();
-            controller.Move(wallRunDirection * wallRunForce * Time.deltaTime);
+            // Override final movement with wall run movement
+            finalMovement = wallRunDirection * wallRunForce * Time.deltaTime;
             anim.SetBool("wallRunLeft", true);
         }
         else
@@ -182,5 +186,11 @@ public class PlayerController : MonoBehaviour
             anim.SetBool("wallRunLeft", false);
             anim.SetBool("isWallRunning", false); // Add this line for debugging purposes ("IsWallRunning: False)
         }
+    }
+
+    void ApplyMovement()
+    {
+        // Single controller.Move() call with final movement vector
+        controller.Move(finalMovement);
     }
 }
